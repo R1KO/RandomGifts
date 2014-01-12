@@ -11,7 +11,7 @@ new g_iExplosionSprite,
 public Plugin:myinfo =
 {
 	name = "[Gifts] Bomb Module",
-	author = "R1KO",
+	author = "R1KO (TeamServer.Ru)",
 	version = "1.1"
 }
 
