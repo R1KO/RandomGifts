@@ -1,0 +1,72 @@
+#include <sourcemod>
+#include <sdktools>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Skins Module",
+	author = "R1KO",
+	version = "1.0.1"
+}
+
+new g_iClientRoundSkin[MAXPLAYERS+1] = 0,
+	String:g_sClientSkin[2][MAXPLAYERS+1][PLATFORM_MAX_PATH],
+	Handle:g_hTimer[MAXPLAYERS+1] = INVALID_HANDLE;
+
+public OnPluginStart() HookEvent("player_spawn", Event_PlayerSpawn);
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	decl iValue, String:sValue[PLATFORM_MAX_PATH];
+	KvGetString(hKV, "Skin_T", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		if(FileExists(sValue))
+		{
+			PrecacheModel(sValue, true);
+			AddFileToDownloadsTable(sValue);
+			SetTrieString(hTrie, "Skin_T", sValue);
+			SetTrieValue(hTrie, "SkinRounds", ((iValue = KvGetNum(hKV, "SkinRounds", 0)) > 1) ? iValue:1);
+		}
+	}
+	KvGetString(hKV, "Skin_CT", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		if(FileExists(sValue))
+		{
+			PrecacheModel(sValue, true);
+			AddFileToDownloadsTable(sValue);
+			SetTrieString(hTrie, "Skin_CT", sValue);
+			SetTrieValue(hTrie, "SkinRounds", (((iValue = KvGetNum(hKV, "SkinRounds", 0)) > 1) ? iValue:1), false);
+		}
+	}
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	decl String:sSkin[PLATFORM_MAX_PATH];
+	if(GetTrieValue(hTrie, "SkinRounds", g_iClientRoundSkin[iClient]))
+	{
+		if(GetTrieString(hTrie, "Skin_T", sSkin, sizeof(sSkin))) strcopy(g_sClientSkin[0][iClient], sizeof(g_sClientSkin[][]), sSkin);
+		if(GetTrieString(hTrie, "Skin_CT", sSkin, sizeof(sSkin))) strcopy(g_sClientSkin[1][iClient], sizeof(g_sClientSkin[][]), sSkin);
+	}
+}
+
+public Action:Event_PlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new iClient = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	if(IsPlayerAlive(iClient) && g_iClientRoundSkin[iClient]) g_hTimer[iClient] = CreateTimer(1.2, SetSkin, GetClientUserId(iClient));
+}
+
+public Action:SetSkin(Handle:hTimer, any:userid)
+{
+	new iClient = GetClientOfUserId(userid);
+	if(iClient > 0 && IsClientInGame(iClient) && IsPlayerAlive(iClient))
+	{
+		new iTeam = GetClientTeam(iClient)-2;
+		if(g_sClientSkin[iTeam][iClient][0] != '\0') SetEntityModel(iClient, g_sClientSkin[iTeam][iClient]);
+		g_iClientRoundSkin[iClient]--;
+	}
+	g_hTimer[iClient] = INVALID_HANDLE;
+}
