@@ -4,7 +4,7 @@
 public Plugin:myinfo =
 {
 	name = "[Gifts] Basic Module",
-	author = "R1KO",
+	author = "R1KO (TeamServer.Ru)",
 	version = "1.1.2"
 }
 
