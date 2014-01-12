@@ -1,0 +1,47 @@
+#include <sourcemod>
+#include <sdktools>
+#pragma semicolon 1
+
+#define EXPLODE_SOUND	"ambient/explosions/explode_8.wav"
+
+new g_iExplosionSprite,
+	g_iSmokeSprite,
+	Float:fNormal[3] = {0.0, 0.0, 1.0};
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Bomb Module",
+	author = "R1KO",
+	version = "1.1"
+}
+
+public OnMapStart() 
+{
+	PrecacheSound(EXPLODE_SOUND, true);
+	g_iExplosionSprite = PrecacheModel("sprites/blueglow2.vmt");
+	g_iSmokeSprite = PrecacheModel("sprites/steam1.vmt");
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	if((KvGetNum(hKV, "Bomb", 0)) != 0) SetTrieValue(hTrie, "Bomb", 1);
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	decl iValue;
+	if(GetTrieValue(hTrie, "Bomb", iValue))
+	{
+		new Float:iVec[3];
+		GetClientAbsOrigin(iClient, Float:iVec);
+
+		TE_SetupExplosion(iVec, g_iExplosionSprite, 5.0, 1, 0, 50, 40, fNormal);
+		TE_SendToAll();
+
+		TE_SetupSmoke(iVec, g_iSmokeSprite, 10.0, 3);
+		TE_SendToAll();
+
+		EmitAmbientSound(EXPLODE_SOUND, iVec, iClient, SNDLEVEL_NORMAL);
+		ForcePlayerSuicide(iClient);
+	}
+}
