@@ -1,0 +1,51 @@
+#include <sourcemod>
+#undef REQUIRE_PLUGIN  
+#include <shop>
+#include <ncs_shop>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Shop Module",
+	author = "R1KO",
+	version = "1.0.1"
+}
+
+new bool:g_bIsShop = false,
+	bool:g_bIsNcsShop = false;
+
+public OnAllPluginsLoaded()
+{
+	g_bIsShop = LibraryExists("shop");
+	g_bIsNcsShop = LibraryExists("ncs_shop");
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	if(g_bIsShop)
+	{
+		new iValue;
+		if((iValue = KvGetNum(hKV, "Credits", 0)) > 0) SetTrieValue(hTrie, "Credits", iValue);
+	}
+	if(g_bIsNcsShop)
+	{
+		new iValue;
+		if((iValue = KvGetNum(hKV, "Silver", 0)) > 0) SetTrieValue(hTrie, "Silver", iValue);
+		if((iValue = KvGetNum(hKV, "Gold", 0)) > 0) SetTrieValue(hTrie, "Gold", iValue);
+	}
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	if(g_bIsShop)
+	{
+		new iValue;
+		if(GetTrieValue(hTrie, "Credits", iValue)) Shop_GiveCredits(iClient, iValue);
+	}
+	if(g_bIsNcsShop)
+	{
+		new iValue;
+		if(GetTrieValue(hTrie, "Silver", iValue)) SetSilver(iClient, (GetSilver(iClient)+iValue));
+		if(GetTrieValue(hTrie, "Gold", iValue)) SetGold(iClient, (GetGold(iClient)+iValue));
+	}
+}
