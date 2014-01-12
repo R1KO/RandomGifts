@@ -1,0 +1,295 @@
+#include <sourcemod>
+#include <sdktools>
+#include <sdkhooks>
+#pragma semicolon 1
+
+#define GIFTS 25
+#define MODEL "models/items/cs_gift.mdl"
+#define SOUND "items/gift_drop.wav"
+#define LIFETIME 15.0
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Core",
+	author = "R1KO & BATYA",
+	version = "2.5.3"
+}
+
+new g_iGiftCount,
+	g_iHasClientGift[MAXPLAYERS+1] = -1;
+
+new Handle:g_hGiftsTrie[GIFTS],
+	Handle:g_hOnPickUp,
+	Handle:g_hOnCreate,
+	Handle:g_hOnClientSpawn,
+	Handle:g_hAddGift;
+
+public OnPluginStart()
+{
+	for(new i = 0; i < GIFTS; i++) g_hGiftsTrie[i] = CreateTrie();
+
+	g_hOnPickUp = CreateGlobalForward("Gifts_OnPickUpGift", ET_Ignore, Param_Any, Param_Cell, Param_Cell, Param_Cell);
+	g_hOnCreate = CreateGlobalForward("Gifts_OnCreateGift", ET_Ignore, Param_Cell);
+	g_hAddGift = CreateGlobalForward("Gifts_OnAddGift", ET_Event, Param_Any, Param_Any);
+	g_hOnClientSpawn = CreateGlobalForward("Gifts_OnClientSpawn", ET_Hook, Param_Any, Param_Cell);
+	
+	HookEvent("player_death", Event_PlayerDeath);
+	HookEvent("player_spawn", Event_PlayerSpawn);
+}
+
+ReadDownloads()
+{
+	decl String:sGiftSound[100];
+	Format(sGiftSound, sizeof(sGiftSound) - 1, "sound/%s", SOUND);
+	PrecacheSound(SOUND, true);
+	AddFileToDownloadsTable(sGiftSound);
+	PrecacheModel(MODEL, true);
+	AddFileToDownloadsTable(MODEL);
+
+	decl String:szPath[255];
+	BuildPath(Path_SM, szPath, sizeof(szPath) - 1, "configs/giftsdownloadlist.ini");
+	new Handle:hFile = OpenFile(szPath, "r");
+	
+	if (hFile == INVALID_HANDLE)
+	{
+		LogError("Не удалось открыть файл '%s'", szPath);
+		return;
+	}
+	else
+	{
+		decl String:line[PLATFORM_MAX_PATH];
+		while (!IsEndOfFile(hFile) && ReadFileLine(hFile, line, sizeof(line)))
+		{
+			TrimString(line);
+			
+			if (FileExists(line))
+				AddFileToDownloadsTable(line);
+		}
+	}
+	CloseHandle(hFile);
+}
+
+public OnConfigsExecuted()
+{
+	ReadDownloads();
+	decl String:sPath[PLATFORM_MAX_PATH];
+	new Handle:hKv = CreateKeyValues("Gifts");
+	BuildPath(Path_SM, sPath, sizeof(sPath), "configs/gifts.cfg");
+	if (FileToKeyValues(hKv, sPath) && KvGotoFirstSubKey(hKv))
+	{
+		g_iGiftCount = 0;
+		do
+		{
+			Call_StartForward(g_hAddGift);
+			Call_PushCell(hKv);
+			Call_PushCell(g_hGiftsTrie[g_iGiftCount]);
+			Call_Finish();
+			g_iGiftCount++;
+		} while (KvGotoNextKey(hKv));
+	}
+	else
+	{
+		LogError("file '%s' not found", sPath);
+		SetFailState("file '%s' not found", sPath);
+	}
+	CloseHandle(hKv);
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	decl iValue, Float:fValue, String:sValue[PLATFORM_MAX_PATH];
+	if((iValue = KvGetNum(hKV, "Chance", 0))) SetTrieValue(hTrie, "Chance", iValue);
+	if((fValue = KvGetFloat(hKV, "Lifetime", 0.0))) SetTrieValue(hTrie, "Lifetime", fValue);
+	KvGetString(hKV, "Model", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		if(FileExists(sValue))
+		{
+			PrecacheModel(sValue, true);
+			AddFileToDownloadsTable(sValue);
+			SetTrieString(hTrie, "Model", sValue);
+		}
+	}
+	KvGetString(hKV, "Sound", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		decl String:sBuffer[PLATFORM_MAX_PATH];
+		Format(sBuffer, sizeof(sBuffer) - 1, "sound/%s", SOUND);
+		if(FileExists(sBuffer))
+		{
+			PrecacheModel(sValue, true);
+			AddFileToDownloadsTable(sBuffer);
+			SetTrieString(hTrie, "Sound", sValue);
+		}
+	}
+	KvGetString(hKV, "TextToAll", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		EditText(sValue, sizeof(sValue));
+		SetTrieString(hTrie, "TextToAll", sValue);
+	}
+
+	KvGetString(hKV, "TextToPlayer", sValue, sizeof(sValue));
+	if(sValue[0] != '\0')
+	{
+		EditText(sValue, sizeof(sValue));
+		SetTrieString(hTrie, "TextToPlayer", sValue);
+	}
+}
+
+public Event_PlayerDeath(Handle:hEvent, const String:sEvName[], bool:bDontBroadcast)
+{
+	new iClient = GetClientOfUserId(GetEventInt(hEvent, "userid")),
+		iAttaker = GetClientOfUserId(GetEventInt(hEvent, "attacker"));
+
+	if(iClient > 0)
+	{
+		if(iAttaker > 0 && iClient != iAttaker && GetClientTeam(iClient) != GetClientTeam(iAttaker))
+		{
+			new iGift = Math_GetRandomInt(0, g_iGiftCount),
+				iChange = Math_GetRandomInt(1, 100), iChangeGift;
+
+			if(GetTrieValue(g_hGiftsTrie[iGift], "Chance", iChangeGift))
+			{
+				if (iChange < iChangeGift)
+				{
+					decl Float:vOrigin[3];
+					GetClientAbsOrigin(iClient, vOrigin);
+					vOrigin[2]-=40.0;
+					SpawnGift(vOrigin, iGift);
+				}
+			}
+		}
+	}
+}
+
+SpawnGift(Float:vOrigin[3], index)
+{
+	new iEntity = CreateEntityByName("prop_dynamic_override");
+	decl String:sTargetName[32], String:tmp[70];
+	IntToString(index, sTargetName, sizeof(sTargetName));
+	DispatchKeyValueVector(iEntity, "origin", vOrigin);
+	DispatchKeyValue(iEntity, "solid", "6");
+	decl Float:fValue, String:sValue[PLATFORM_MAX_PATH];
+	DispatchKeyValue(iEntity, "model", (GetTrieString(g_hGiftsTrie[index], "Model", sValue, sizeof(sValue))) ? sValue:MODEL);
+
+	DispatchKeyValue(iEntity, "targetname", sTargetName);
+	DispatchSpawn(iEntity);
+	
+	SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", 8);
+	SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 1);
+
+	Format(tmp, sizeof(tmp), "OnUser1 !self:kill::%0.2f:-1", (GetTrieValue(g_hGiftsTrie[index], "Lifetime", fValue)) ? fValue : LIFETIME);
+	SetVariantString(tmp);
+	AcceptEntityInput(iEntity, "AddOutput"); 
+	AcceptEntityInput(iEntity, "FireUser1");
+
+
+	new iRotating = CreateEntityByName("func_rotating");
+	DispatchKeyValueVector(iRotating, "origin", vOrigin);
+	DispatchKeyValue(iRotating, "targetname", sTargetName);
+	DispatchKeyValue(iRotating, "maxspeed", "180");
+	DispatchKeyValue(iRotating, "friction", "0");
+	DispatchKeyValue(iRotating, "dmg", "0");
+	DispatchKeyValue(iRotating, "solid", "0");
+	DispatchKeyValue(iRotating, "spawnflags", "64");
+	DispatchSpawn(iRotating);
+
+	SetVariantString("!activator");
+	AcceptEntityInput(iEntity, "SetParent", iRotating, iRotating);
+	AcceptEntityInput(iRotating, "Start");
+
+	Call_StartForward(g_hOnCreate);
+	Call_PushCell(iEntity);
+	Call_Finish();
+
+	SDKHook(iEntity, SDKHook_StartTouch, Hook_GiftStartTouch);
+}
+
+public Hook_GiftStartTouch(iEntity, iClient)
+{
+	if (iClient > 0 && iClient <= MaxClients && IsPlayerAlive(iClient))
+	{
+		decl String:sIndex[10];
+		GetEntPropString(iEntity, Prop_Data, "m_iName", sIndex, sizeof(sIndex));
+		new index = StringToInt(sIndex);
+		Call_StartForward(g_hOnPickUp);
+		Call_PushCell(g_hGiftsTrie[index]);
+		Call_PushCell(iClient);
+		Call_PushCell(iEntity);
+		Call_PushCell(index);
+		Call_Finish();
+	}
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity, index)
+{
+	AcceptEntityInput(iEntity, "Kill");
+	g_iHasClientGift[iClient] = index;
+	decl String:sValue[PLATFORM_MAX_PATH];
+
+	new Float:iVec[3];
+	GetClientAbsOrigin(iClient, Float:iVec);
+	EmitAmbientSound(((GetTrieString(hTrie, "Sound", sValue, sizeof(sValue))) ? sValue:SOUND), iVec, iClient, SNDLEVEL_NORMAL);
+
+	if(GetTrieString(hTrie, "TextToAll", sValue, sizeof(sValue)))
+	{
+		EditString(sValue, sizeof(sValue), iClient);
+		for (new i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i) && i != iClient) PrintToChat(i, sValue);
+		}
+	}
+
+	if(GetTrieString(hTrie, "TextToPlayer", sValue, sizeof(sValue)))
+	{
+		EditString(sValue, sizeof(sValue), iClient);
+		PrintToChat(iClient, sValue);
+	}
+}
+
+public Action:Event_PlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new iClient = GetClientOfUserId(GetEventInt(event, "userid"));
+	if(IsPlayerAlive(iClient))
+	{
+		if(g_iHasClientGift[iClient] > -1)
+		{
+			Call_StartForward(g_hOnClientSpawn);
+			Call_PushCell(g_hGiftsTrie[g_iHasClientGift[iClient]]);
+			Call_PushCell(iClient);
+			Call_Finish();
+			g_iHasClientGift[iClient] = -1;
+		}
+	}
+}
+
+String:EditString(String:sValue[], len, iClient)
+{
+	if (StrContains(sValue, "{NAME}") != -1)
+	{
+		decl String:sName[MAX_NAME_LENGTH];
+		GetClientName(iClient, sName, sizeof(sName));
+		ReplaceString(sValue, len, "{NAME}", sName, false);
+	}
+	return sValue;
+}
+
+String:EditText(String:sValue[], len)
+{
+	ReplaceString(sValue, len, "\\n", "\n");
+	ReplaceString(sValue, len, "#", "\x07");
+	ReplaceString(sValue, len, "{DEFAULT}", "\x01");
+	ReplaceString(sValue, len, "{GREEN}", "\x04");
+	ReplaceString(sValue, len, "{LIGHTGREEN}", "\x03");
+
+	return sValue;
+}
+
+stock Math_GetRandomInt(min, max)
+{
+	new random = GetURandomInt();
+	if (!random) random++;
+	new number = RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+	return number;
+}
