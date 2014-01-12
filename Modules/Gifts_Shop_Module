@@ -7,7 +7,7 @@
 public Plugin:myinfo =
 {
 	name = "[Gifts] Shop Module",
-	author = "R1KO",
+	author = "R1KO (TeamServer.Ru)",
 	version = "1.0.1"
 }
 
