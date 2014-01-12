@@ -1,0 +1,73 @@
+#include <sourcemod>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Basic Module",
+	author = "R1KO",
+	version = "1.1.2"
+}
+
+new g_iAccount = -1,
+	g_iHealth = -1,
+	g_iSpeed = -1,
+	g_iArmorValue = -1;
+
+public OnPluginStart()
+{
+	g_iAccount = GetSendPropOffset("CCSPlayer", "m_iAccount");
+	g_iHealth = GetSendPropOffset("CCSPlayer", "m_iHealth");
+	g_iArmorValue = GetSendPropOffset("CCSPlayer", "m_ArmorValue");
+	g_iSpeed = GetSendPropOffset("CCSPlayer", "m_flLaggedMovementValue");
+}
+
+
+GetSendPropOffset(const String:sNetClass[], const String:sPropertyName[])
+{
+	new iOffset = FindSendPropOffs(sNetClass, sPropertyName);
+	if (iOffset == -1) SetFailState("Fatal Error: Unable to find offset: \"%s::%s\"", sNetClass, sPropertyName);
+
+	return iOffset;
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	decl iValue, Float:fValue;
+	if((iValue = KvGetNum(hKV, "HP", 0)) != 0) SetTrieValue(hTrie, "HP", iValue);
+	if((iValue = KvGetNum(hKV, "Armor", 0)) != 0) SetTrieValue(hTrie, "Armor", iValue);
+	if((iValue = KvGetNum(hKV, "Money", 0)) != 0) SetTrieValue(hTrie, "Money", iValue);
+	if((fValue = KvGetFloat(hKV, "Speed", 0.0)) != 0.0) SetTrieValue(hTrie, "Speed", fValue);
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	new iValue;
+	if(GetTrieValue(hTrie, "Money", iValue))
+	{
+		new CashToSet = GetEntData(iClient, g_iAccount) + iValue;
+		SetEntData(iClient, g_iAccount, CashToSet);
+	}
+}
+
+public Gifts_OnClientSpawn(Handle:hTrie, iClient) 
+{
+	decl iValue, Float:fValue;
+
+	if(GetTrieValue(hTrie, "HP", iValue)) SetEntData(iClient, g_iHealth, (GetEntData(iClient, g_iHealth) + iValue));
+	if(GetTrieValue(hTrie, "Armor", iValue)) SetEntData(iClient, g_iArmorValue, (GetEntData(iClient, g_iArmorValue) + iValue));
+	
+	if(GetTrieValue(hTrie, "Speed", fValue))
+	{
+		new Handle:hPack = CreateDataPack(); 
+		WritePackCell(hPack, iClient);
+		WritePackFloat(hPack, fValue);
+		CreateTimer(1.2, SetClientSpeed, hPack, TIMER_DATA_HNDL_CLOSE);
+	}
+}
+
+public Action:SetClientSpeed(Handle:hTimer, any:hPack)
+{
+	ResetPack(hPack);
+	new iClient = ReadPackCell(hPack);
+	if(IsClientInGame(iClient) && IsPlayerAlive(iClient)) SetEntData(iClient, g_iSpeed, ReadPackFloat(hPack));
+}
