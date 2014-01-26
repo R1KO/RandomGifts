@@ -1,0 +1,24 @@
+#include <sourcemod>
+#include <thc_rpg>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] thc_rpg Module",
+	author = "R1KO",
+	version = "1.0.1"
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	new iValue;
+	if((iValue = KvGetNum(hKV, "rpg_XP", 0)) > 0) SetTrieValue(hTrie, "rpg_XP", iValue);
+	if((iValue = KvGetNum(hKV, "rpg_Credits", 0)) > 0) SetTrieValue(hTrie, "rpg_Credits", iValue);
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	new iValue;
+	if(GetTrieValue(hTrie, "rpg_XP", iValue)) thc_rpg_SetXP(iClient, (thc_rpg_GetXP(iClient)+iValue));
+	if(GetTrieValue(hTrie, "rpg_Credits", iValue)) thc_rpg_SetCredits(iClient, (thc_rpg_GetCredits(iClient)+iValue));
+}
