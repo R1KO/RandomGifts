@@ -1,0 +1,22 @@
+#include <sourcemod>
+#include <sdktools>
+#include <cssthrowingknives>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] Throwing knives Module",
+	author = "R1KO",
+	version = "1.0.0"
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	if((KvGetNum(hKV, "Knives", 0)) != 0) SetTrieValue(hTrie, "Knives", 0);
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	decl iValue;
+	if(GetTrieValue(hTrie, "Knives", iValue)) SetClientThrowingKnives(iClient, iValue);
+}
