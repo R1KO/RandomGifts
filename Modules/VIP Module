@@ -1,0 +1,36 @@
+#include <sourcemod>
+#include <sdktools>
+#pragma semicolon 1
+
+public Plugin:myinfo =
+{
+	name = "[Gifts] VIP Module",
+	author = "R1KO",
+	version = "1.0.3"
+}
+
+public Gifts_OnAddGift(Handle:hKV, Handle:hTrie) 
+{
+	decl iValue, String:sValue[PLATFORM_MAX_PATH];
+	if((iValue = KvGetNum(hKV, "VIP_duration", 0)) > 0) SetTrieValue(hTrie, "VIP_duration", iValue);
+	KvGetString(hKV, "VIP_flags", sValue, sizeof(sValue));
+	if(sValue[0] != '\0') SetTrieString(hTrie, "VIP_flags", sValue);
+	else
+	{
+		KvGetString(hKV, "VIP_group", sValue, sizeof(sValue));
+		if(sValue[0] != '\0') SetTrieString(hTrie, "VIP_group", sValue);
+	}
+}
+
+public Gifts_OnPickUpGift(Handle:hTrie, iClient, iEntity)
+{
+	decl iValue;
+	if(GetTrieValue(hTrie, "VIP_duration", iValue))
+	{
+		decl String:sAuth[32], String:sValue[PLATFORM_MAX_PATH];
+		GetClientAuthString(iClient, sAuth, sizeof(sAuth));
+		if(GetTrieString(hTrie, "VIP_flags", sValue, sizeof(sValue))) Format(sValue, sizeof(sValue), "\"Flags\" \"%s\"", sValue);
+		else if(GetTrieString(hTrie, "VIP_group", sValue, sizeof(sValue)))  Format(sValue, sizeof(sValue), "\"Group\" \"%s\"", sValue);
+		ServerCommand("vip_users_add \"%N\" \"%s\" %s %d", iClient, sAuth, sValue, (GetTime()+(iValue*60)));
+	}
+}
